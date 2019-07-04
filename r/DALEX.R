@@ -182,3 +182,13 @@ neigh <- select_neighbours(validDF, validDF[1, ])
 cp <- ceteris_paribus(explainer_xgb, observations = neigh)
 plot(cp, selected_variables = x_selected)
 
+# Fully flexible partial dependence plots for nice reports
+source("r/partialDependence.R")
+
+dat <- explainers %>% 
+  lapply(partialDependence, list(bedrooms = 1:5, dRenovated = c(FALSE, TRUE))) %>% 
+  bind_rows()
+
+ggplot(dat, aes(x = bedrooms, y = predicted, group = label, color = label)) +
+  geom_line(alpha = 0.7) +
+  facet_wrap(~dRenovated)

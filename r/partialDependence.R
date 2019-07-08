@@ -3,7 +3,7 @@
 #' @import dplyr
 #' @importFrom tidyr crossing
 #' 
-#' @description Generates partial dependence plot data based on a DALEX explainer.
+#' @description Generates partial dependence plot data based on a DALEX explainer. Note that there is an unkeyed outer join of the explainer data and all combinations of the grid variables. Thus, don't use too many grid points or too large explainer data.
 #' @author Michael Mayer, \email{mayermichael79@gmail.com}
 #' @param explainer DALEX explainer.
 #' @param grid A named list of grid points.
@@ -40,4 +40,43 @@ partialDependence <- function(explainer, grid, by = NULL) {
     summarize(predicted = mean(predicted, na.rm = TRUE)) %>% 
     ungroup() %>% 
     mutate(label = explainer$label)
+}
+
+
+
+# Calculates both descriptive effects and effects from partial dependence plot. Can definitively
+# be improved, especially the part where x-scale of partial dependence and descriptive stats
+# are being aligned.
+effects <- function(data, v, explainers, strata = strata, response, breaks = NULL) {
+  stopifnot(c(v, strata) %in% colnames(data))
+  
+  # Deal with x breaks... (ugly)
+  if (is.numeric(vv <- data[[v]]) && length(unique(vv)) > 15) {
+    if (!is.null(breaks)) {
+      data$temp_ <- cut(vv, breaks = breaks, include.lowest = TRUE)
+    } else {
+      data$temp_ <- Hmisc::cut2(vv, g = 11)
+    }
+    grid <- data %>% 
+      group_by(temp_) %>% 
+      summarize_at(v, median, na.rm = TRUE)
+  } else {
+    data$temp_ <- data[[v]]
+    grid <- if (is.factor(vv)) factor(levels(vv), levels(vv)) else unique(vv) 
+    grid <- setNames(data.frame(grid, grid), c("temp_", v))
+  }
+  
+  # Data for partial dependence plot
+  modelled <- lapply(explainers, partialDependence, grid = grid[, v, drop = FALSE]) %>% 
+    bind_rows() %>% 
+    rename(modelliert = predicted)
+  
+  # Descriptive data joined with partial dependence data and scaling data
+  data %>% 
+    group_by_at(c(strata, "temp_")) %>% 
+    summarize(n = n(), deskriptiv = mean(!!sym(response))) %>% 
+    ungroup() %>% 
+    left_join(grid, by = "temp_") %>% 
+    left_join(modelled, by = c(v, setNames(nm = strata, "label"))) %>% 
+    gather(key = "Type", value = response, deskriptiv, modelliert)
 }

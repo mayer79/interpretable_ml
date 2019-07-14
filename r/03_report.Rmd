@@ -11,8 +11,6 @@ output:
 # Set initial_run to FALSE if only plots and text has to be adapted. This will save
 # a lot of time as partial dependence plots are computationally demanding to calculate.
 
-initial_run <- FALSE
-
 source("../r/functions.R", encoding = "UTF-8")
 
 knitr::opts_chunk$set(fig.width = 16, fig.height = 10, echo = FALSE, 
@@ -27,6 +25,8 @@ load(file.path(path, "models.RData"))
 
 library(tidyverse)
 library(ggpubr)
+library(moderndive)
+library(kableExtra)
 
 ```
 
@@ -34,7 +34,13 @@ Blabla
 
 ## Data
 
+We use a data set `house_prices` with information on `r format(nrow(prep), big.mark = "'")` sold houses for King County. It is shipped with R package `moderndive`.
 
+The first six observations look as follows:
+
+```{r}
+kable(head(house_prices))
+```
 
 ## Methods
 
@@ -48,36 +54,29 @@ We have considered the following modelling techniques
 
 - boosted trees.
 
-The models were calculated on 70% of the data (the training set), were validated and interpreted on 20% (the validation set). 10% are still untouched for modelling. The validation data set has not been used otherwise for modelling. So e.g. the parameters of the boosted trees were chosen by five-fold cross-validation on the training data.
+The models were calculated on 70% of the data (training data), were validated and interpreted on 20% (validation data). 10% are still untouched for modelling (test data). The validation data set has not been used otherwise for modelling. E.g. the parameters of the boosted trees were chosen by five-fold cross-validation on the training data.
 
-We have ended up with the following root mean squared errors evaulated at log price level. 
+We have ended up with the following metrics evaluated on the validation data in the log world. 
 
 ```{r}
-perfTable <- data.frame(Type = names(perf), rmse = perf)
-ggplot(perfTable, aes(x = Type, y = rmse, fill = Type)) + 
+ggplot(perfTable, aes(x = label, y = value, fill = label)) + 
   geom_bar(position = position_dodge(), stat = "identity", show.legend = FALSE) +
+  facet_wrap(~type) +
   ggtitle("Model performance") + 
   theme_bw(base_size = 25) +
   theme(legend.title = element_blank(), 
         legend.position = "bottom", 
         axis.text.x = element_text(angle = 45, hjust = 1)) +
-  labs(x = element_blank(), y = "Root mean squared error") +
-  scale_fill_viridis_d()
+  labs(x = element_blank(), y = element_blank()) +
+  scale_fill_viridis_d(begin = 0.1, end = 0.7)
 ```
 
 
 
 ## Association of variables with response
-
+The following diagram shows total loss increase due to random shuffling each variable. The more important the variable, the larger the loss increase.
 
 ```{r}
-# Variable importance on permuting testation data
-# A model agnostic way to study variable importance is to study the worsening 
-# of the total loss if the values in variable $X$ are randomly permuted. 
-# unimportant variable would lead to a small increase in loss if permuted, 
-# while an important one would lead to completely wrong predictions and, 
-# consequently to a large gain in loss.
-
 ggplot(varImp, aes(x = reorder(variable, dropout_loss), y = dropout_loss, fill = label)) + 
   geom_bar(position = position_dodge(), stat = "identity", show.legend = FALSE) +
   facet_wrap(~label) +
@@ -85,7 +84,7 @@ ggplot(varImp, aes(x = reorder(variable, dropout_loss), y = dropout_loss, fill =
   theme_bw(base_size = 25) +
   theme(axis.text.x = element_blank()) +
   labs(x = element_blank(), y = element_blank()) +
-  scale_fill_viridis_d(begin = 0.2, end = 0.7)
+  scale_fill_viridis_d(begin = 0.1, end = 0.7)
 ```
 
 Best predictors are `r paste(head(most_relevant), collapse = ", ")`.
@@ -105,24 +104,26 @@ The results are ordered by variable importance.
 for (v in most_relevant) { # v <- most_relevant[[1]]
   cat(sprintf("### %s \n", v))
   
-  resp <- ggplot(eff[[v]]$resp, aes(x = temp_, y = response, group = label, color =label)) +
-                 geom_point(size = 5, alpha = 0.7) +
-                 geom_line(size = 1.5, alpha = 0.7) +
-                 theme_bw(base_size = 25) +
-                 theme(legend.position = "top", legend.title = element_blank(),
-                       legend.background = element_rect(fill = "transparent"),
-                       axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
-                 xlab(v) +
-                 scale_y_continuous(name = "Price", labels = scales::comma) +
-                 scale_color_viridis_d(begin = 0.2, end = 0.9)
+  resp <- ggplot(mapping = aes(x = factor(temp_), y = price)) +
+    stat_summary(data = eff[[v]]$data, fun.data = box_stats, geom = "crossbar",
+                 width = 0.5, fill = "darkblue", colour = "black", alpha = 0.1) +
+    geom_line(data = eff[[v]]$modelled, aes(group = label, color = label), size = 1.5) +
+    geom_point(data = eff[[v]]$modelled, aes(group = label, color = label), size = 4) +
+    theme_bw(base_size = 25) +
+    theme(legend.position = c(0.5, 0.9), legend.title = element_blank(),
+          legend.background = element_rect(fill = "transparent"),
+          axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+    xlab(element_blank()) +
+    scale_y_continuous(name = "Price", labels = scales::comma) +
+    scale_color_viridis_d(begin = 0.1, end = 0.7)
   
   counts <- ggplot(eff[[v]]$counts, aes(x = temp_, y = n,
-                     label = format(n, big.mark = "'", scientific = FALSE))) +
-                     geom_bar(stat = "identity", fill = "#414487FF", alpha = 0.3) +
-                     geom_text(aes(y = 1000), angle = 90, hjust = 0, size = 6) +
-                     theme_void() +
-                     theme(strip.text.x = element_blank(), panel.grid = element_blank())
-        
+                   label = format(n, big.mark = "'", scientific = FALSE))) +
+    geom_bar(stat = "identity", fill = "darkblue", alpha = 0.1, width = 0.5) +
+    geom_text(aes(y = 0), angle = 90, hjust = -0.1, size = 6) +
+    theme_void() +
+    theme(strip.text.x = element_blank(), panel.grid = element_blank())
+
   print(ggarrange(counts, resp, heights = c(0.2, 1), ncol = 1, nrow = 2, align = "v"))
   
   cat("\n\n")

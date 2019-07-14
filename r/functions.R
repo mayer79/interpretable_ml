@@ -42,11 +42,23 @@ partialDependence <- function(explainer, grid, by = NULL) {
     mutate(label = explainer$label)
 }
 
-# Model performance for Dalex explainer
-get_performance <- function(explainer, metrics = rmse) {
+# Model performance for Dalex explainer. Metrics is a named vector or list of functions taking
+# two arguments: the observed and predicted values
+get_performance <- function(explainer, metrics) {
   stopifnot(inherits(explainer, "explainer"))
-  with(explainer, metrics(y, predict_function(model, data)) %>% 
-         setNames(label))
+
+  with(explainer,
+       vapply(metrics, function(fun, a, b) fun(a, b), FUN.VALUE = 1, 
+         a = y, b = predict_function(model, data))) %>% 
+    t() %>% 
+    data.frame(label = explainer$label, ., check.names = FALSE) %>% 
+    gather(key = "type", value = "value", -label) %>% 
+    mutate(type = factor(type, names(metrics)))
+}
+
+# R-squared
+r2 <- function(y, pred) {
+  1 - sum((y - pred)^2) / sum((y - mean(y))^2)
 }
 
 # Interface to lm
@@ -89,15 +101,19 @@ effects <- function(data, v, explainers, response, breaks = NULL) {
     bind_rows() %>% 
     left_join(grid, by = v) %>% 
     select(-one_of(v)) %>% 
-    rename(response = predicted)
-    
-  # Descriptive data joined with partial dependence data and scaling data
-  resp <- data %>% 
-    group_by(temp_) %>% 
-    summarize(response = mean(!!sym(response))) %>% 
-    mutate(label = "Empirical") %>% 
-    bind_rows(modelled)
+    rename_at("predicted", function(nm) response)
   
-  list(resp = resp, counts = count(data, temp_))
+  # Descriptive data joined with partial dependence data and scaling data
+  
+  list(modelled = modelled, 
+       data = data %>% select_at(c(response, "temp_")), 
+       counts = count(data, temp_))
+}
+
+box_stats <- function(x) {
+  quantile(x, probs = c(0.5, 0.25, 0.75), na.rm = TRUE) %>%
+    t() %>% 
+    data.frame() %>% 
+    setNames(c("y", "ymin", "ymax"))
 }
 

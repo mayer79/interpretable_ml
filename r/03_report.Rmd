@@ -1,5 +1,5 @@
 ---
-title: "Connecting descriptive analyses with machine learning"
+title: "Interpretable Machine Learning"
 date: "`r Sys.Date()`"
 author: Michael Mayer
 output:
@@ -22,29 +22,43 @@ load(file.path(path, "models.RData"))
 
 library(tidyverse)
 library(ggpubr)
-library(moderndive)
 library(kableExtra)
-
+library(moderndive)
 ```
-In contrast to classic statistical modelling techniques like linear regression, modern machine learning approaches tend to provide black box results. In some areas like visual computing or natural language processing, this is not an issue since there, focus usually lies on predicting things. Either the model provides sufficiently useful predictions in practice or it will be discarded. However, in areas where the purpose of a statistical model is also to explain or validate underlying theories (e.g. in medicine, economics, and biologiy), black box models are of little use. Thus, there is need to make machine learning models less black. Special focus is on "model agnostic" approaches that work for any kind of modelling technique. They keep the workflow simple.
 
-There are different types of model agnostic aspects of a model, e.g.
+## Basic Idea
 
-- variable importance through random permutation,
+## Aims of this project
 
-- ceteris paribus profiles: how do predictions of object $i$ change when systematically changing the values of variable $X$?
+This project has three aims:
 
-- marginal effects plots: Aggregate ceteris paribus profiles across many observations to find average partial effects.
+1) Provide a template for small to medium sized machine learning projects.
 
-- Model performance
+2) Explain and visualize the results of the models.
 
-In R, the `DALEX` package provides a common interface to many such tools. It works by creating an explainer consisting of a model fit, an evaluation data set, a prediction function based on the latter two, the responses, a label and an inverse link function to post-process the predictions. Based on these, all model aganostic methods can be derived as they strictly require only a predict method. One disadvantage of `DALEX` is that its results are not meant for postprocessing. E.g. it is not easy to combine the results of partial dependence plots with empirical effects. In my view, the latter is the core to many good presentations: How does the response depend on a factor $X$ empirically as well as modelled? How does typical house prices depend on the lot size (empirically as well as conditionally on other factors)?
+3) Automatically generate a slim report by a compact R markdown script.
 
-The aim of this project is to illustrate some of the ideas and to provide a simple template for your own machine learning projects.
+## Background
 
-## Data
+In contrast to classic statistical modelling techniques like linear regression, modern machine learning approaches tend to provide black box results. In some areas like visual computing or natural language processing, this is not an issue since focus usually lies on predicting things. Either the model provides sufficiently useful predictions in practice or it will be discarded. However, in areas where the purpose of a statistical model is also to explain or validate underlying theories (e.g. in medicine, economics, and biologiy), black box models are of little use. 
 
-We use the data set `house_prices` with information on `r format_large(nrow(prep))` houses sold in King County between May 2014 and May 2015. It is shipped along with R package `moderndive`.
+Thus, there is need to make machine learning models "less black" resp. to explain machine learning models as good as possible. Of special interest are "model agnostic" approaches that work for any kind of modelling technique, no matter if it is a linear regression, a neural net or a tree-based method. 
+
+Some helpful model agnostic elements include the following:
+
+- Model performance: How precise are models if applied e.g. to unseen data?
+
+- Variable importance: Which variables are particularly relevant? A model agnostic way to assess this is called "permutation importance": For each input variable $X$, its values are randomly shuffled and the drop in performance (or the increase in loss) is calculated. The more important a variable for forming the prediction, the larger the drop. If a variable can be shuffled without any impact on model precision, it is completely irrelevant.
+
+- Ceteris paribus profiles: How do predictions of line $i$ change when one or multiple inputs $X$ are systematically being changed? E.g. how does the predicted house price change when moving it across all ZIPs, holding all other inputs constant?
+
+- Partial dependence plots: Average of ceteris paribus profiles e.g. of the full validation data.
+
+In R, the `DALEX` package provides a common interface to many such tools. It works by creating an "explainer" consisting of a model fit, an evaluation data set, a prediction function based on the latter two, the responses, a label and an inverse link function to post-process the predictions. This is done for each model. Based on these informations, most model agnostic evaluations can be derived. One disadvantage of `DALEX` is that its results are not meant for postprocessing. E.g. it is not easy to combine a partial dependence plot with boxplots of the response. Fortunately, it is very easy to write own functions based on `DALEX` explainers. In this project, we e.g. write our own "partial dependence plot" functions as well as a function to extract model performance.
+
+## Situation under Consideration
+
+As illustration of above ideas we use the data set `house_prices` with information on `r format_large(nrow(prep))` houses sold in King County between May 2014 and May 2015. It is shipped along with R package `moderndive`.
 
 The first few observations look as follows:
 
@@ -52,32 +66,36 @@ The first few observations look as follows:
 house_prices %>% 
   head(10) %>% 
   kable() %>%
-  kable_styling() %>% 
-  row_spec(row = 1:10, color = "white", background = "#D7261E")
+  kable_styling()
 ```
 
-
-## Models and their performance
-
-We have considered 
+Thus we have access to many relevant infos like size and condition as well as location of the objects. We want to use these variables to predict the (log) house prices by the help of the following regression techniques and shed some light on them: 
 
 - linear regression,
 
-- random forests and
+- random forests, and
 
-- boosted trees
+- boosted trees.
 
-to model house prices at logarithmic level. 
+We use 70% of the data as training data to calculate the models, 20% for evaluating their performance and explaining them. 10% we keep untouched. They could be used for evaluating the performance of the finally selected model (in our case probably the boosted trees or an aggregate of all modelling techniques).
 
-The models were calculated on 70% of the data (training data) and were validated and interpreted on 20% (validation data). 10% are still untouched for modelling (test data). The validation data set has not been used otherwise for modelling, so e.g. the parameters of the boosted trees were chosen by five-fold cross-validation on the *training* data.
+Note: All model related decisions were made on the training data, e.g. by five-fold cross-validation in case of the parameter tuning of the boosted trees.
 
 ### Monotonicity
 
-One big step towards explainability is to introduce monotonicity constraints, an option that is e.g. available in the tree boosting libraries "XGBoost" and "LightGBM" (we are working here with the latter). We have imposed positive constraints on "grade", "sqft_living", "condition" as well as "waterfront". As a consequence, ceteris paribus profiles and their aggregates are monotonically increasing in these variables (keeping all other factors constant).
+One big step towards explainability is to introduce monotonicity constraints in the model effects, an option that is e.g. available in the two major tree boosting libraries "XGBoost" and "LightGBM" (we are working with the latter here). We impose positive constraints on "grade", "sqft_living", "condition" as well as "waterfront". As a consequence, ceteris paribus profiles and their aggregated partial dependence plots will be monotonically increasing in these variables. So e.g. a higher grade will never lead to a lower prediction if all other values are kept constant. This is an extremely important option in real-world application where users of the model can play around with the input. 
 
-### Performance
+## Results
 
-We have ended up with the following metrics evaluated on the validation data in the log world. 
+### Performance of the Models
+
+We have ended up with the following metrics evaluated on the validation data in the log world:
+
+- `rmse`: The root mean squared error
+
+- `mae`: The mean absolute error
+
+- `R-squared`: The usual R-squared. The only metric shown where higher values are better.
 
 ```{r}
 ggplot(perfTable, aes(x = label, y = value, fill = label)) + 
@@ -91,10 +109,11 @@ ggplot(perfTable, aes(x = label, y = value, fill = label)) +
   labs(x = element_blank(), y = element_blank()) +
   scale_fill_viridis_d(begin = 0.1, end = 0.7)
 ```
+The winner (as always in these kind of comparisons) is the tuned tree booster. Without any tuning, the random forest was better.
 
-## Association of variables with response
+### Variable Importance
 
-The following diagram shows increase in mean squared error loss due to random shuffling each variable. The more important the variable, the larger the loss increase. A completely irrelevant variable can be shuffled without impact on the prediction accuracy.
+Which variables have the highest impact on the response? Which are irrelevant?
 
 ```{r}
 ggplot(varImp, aes(x = reorder(variable, dropout_loss), y = dropout_loss, fill = label)) + 
@@ -107,41 +126,46 @@ ggplot(varImp, aes(x = reorder(variable, dropout_loss), y = dropout_loss, fill =
   scale_fill_viridis_d(begin = 0.1, end = 0.7)
 ```
 
-Best predictors are `r paste(most_relevant[1:4], collapse = ", ")`, and `r most_relevant[5]`.
+The best predictors seem to be `r paste(most_relevant[1:2], collapse = ", ")`, and `r most_relevant[3]`. It is interesting to see how well the boosted trees pick up the effect of the zip code, even if we have represented it as a numeric variable without dummy coding or pre-sorting on the response.
 
-## Effect per variable
+### Effects
 
-We now describe the association for each covariable by considering
+We now describe the association with the response for each input variable by considering both
 
 - **empirical effects**, i.e. boxplots (boxes only) of the response per level of the covariable,
 
-- corresponding partial dependence plots. They show **modelled average effects** that cannot be explained by other variables.
+- corresponding **partial dependence plots** of modelled effects.
 
 The results are ordered by variable importance.
 
+Note that numeric covariables with many categories were grouped for visualization.
+
 ```{r, results = "asis"}
 for (v in most_relevant) { # v <- most_relevant[[1]]
-  cat(sprintf("### %s \n", v))
+  cat(sprintf("#### %s \n", v))
   
+  # Boxplots with empirical results plus partial dependence plots
   resp <- ggplot(mapping = aes(x = factor(temp_), y = price)) +
     stat_summary(data = eff[[v]]$data, fun.data = box_stats, geom = "crossbar",
                  width = 0.3, fill = "darkblue", colour = "black", alpha = 0.1) +
     geom_line(data = eff[[v]]$modelled, aes(group = label, color = label), size = 1.5) +
     geom_point(data = eff[[v]]$modelled, aes(group = label, color = label), size = 4) +
+    xlab(element_blank()) +
+    scale_y_continuous(name = "Price", labels = format_large) +
+    scale_color_viridis_d(begin = 0.1, end = 0.7) +
     theme_bw(base_size = 25) +
     theme(legend.position = c(0.5, 0.9), legend.title = element_blank(),
           legend.background = element_rect(fill = "transparent"),
-          axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
-    xlab(element_blank()) +
-    scale_y_continuous(name = "Price", labels = format_large) +
-    scale_color_viridis_d(begin = 0.1, end = 0.7)
+          axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
   
+  # Count distributions visualized as bar plots
   counts <- ggplot(count(eff[[v]]$data, temp_), aes(x = temp_, y = n, label = format_large(n))) +
     geom_bar(stat = "identity", fill = "darkblue", alpha = 0.1, width = 0.3) +
     geom_text(aes(y = 0), angle = 90, hjust = -0.1, size = 6) +
     theme_void() +
     theme(strip.text.x = element_blank(), panel.grid = element_blank())
 
+  # Arrange neatly
   print(ggarrange(counts, resp, heights = c(0.2, 1), ncol = 1, nrow = 2, align = "v"))
   
   cat("\n\n")

@@ -2,9 +2,9 @@
 # Data preparation
 #==========================================================================
 
-library(tidyverse)
-library(moderndive) # For data 
+library(moderndive) # "house_prices" data
 
+dim(house_prices)
 head(house_prices)
 
 # Apply necessary data preparation steps
@@ -14,10 +14,11 @@ prep <- transform(house_prices,
                   year = factor(lubridate::year(date)),
                   age = lubridate::year(date) - yr_built,
                   zipcode = as.numeric(as.character(zipcode)),
-                  waterfront = as.integer(waterfront))
+                  waterfront = factor(waterfront, levels = c(FALSE, TRUE), labels = c("no", "yes")))
 
 # Special columns
 y <- "log_price"
+
 x <- c("grade", "year", "age", "sqft_living", "sqft_lot", "zipcode", 
        "condition", "waterfront")
 

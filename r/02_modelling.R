@@ -2,7 +2,7 @@
 # Modelling
 #==================================================================
 
-# install.packages("https://github.com/mayer79/lightgbm_r_binaries/raw/master/R_3_6_0/lightgbm_2_2_4/lightgbm.zip", repos = NULL) 
+# install.packages("https://github.com/mayer79/lightgbm_r_binaries/raw/master/R_3_5_0/lightgbm_2_2_3/lightgbm.zip", repos = NULL) 
 
 library(tidyverse)
 library(lightgbm) 
@@ -15,7 +15,7 @@ load("rdata/prep.RData", verbose = TRUE)
 source("r/functions.R", encoding = "UTF-8")
 
 #==================================================================
-# Train/valid split
+# Train / valid / test split (70% / 20% / 10%)
 #==================================================================
 
 set.seed(56745)
@@ -26,7 +26,7 @@ valid <- prep[ind %in% 2:3, ]
 test <- prep[ind == 1, ]
 
 #======================================================================
-# Logistic regression
+# Linear regression
 #======================================================================
 
 (form <- reformulate(x, y))
@@ -35,13 +35,13 @@ fit_lm <- lm(form, data = prep_lm(train))
 summary(fit_lm)
 
 #======================================================================
-# "Random forest"
+# Random forest
 #======================================================================
 
 fit_rf <- ranger(form, data = train, importance = "impurity", seed = 8373)
-cat("R-sqrared OOB:", 1 - fit_rf$prediction.error)
+cat("R-squared OOB:", fit_rf$r.squared)
 
-# object.size(fit_rf) # 0.7 / 1 GB
+# object.size(fit_rf)
 
 # In-built variable importance
 # par(mar = c(0, 10, 0, 0))
@@ -53,7 +53,7 @@ cat("R-sqrared OOB:", 1 - fit_rf$prediction.error)
 
 # Note that the column order has to be identical when predicting on new data!
 dtrain_lgb <- lgb.Dataset(prep_lgb(train, x), label = train[[y]], 
-                          categorical_feature = c("year"))
+                          categorical_feature = c("year")) # Not necessary, just as example
 
 # GRID SEARCH PART - CAN BE SKIPPED IF ALREADY TUNED
 # paramGrid <- expand.grid(iteration = NA_integer_, # filled by algorithm
@@ -69,7 +69,7 @@ dtrain_lgb <- lgb.Dataset(prep_lgb(train, x), label = train[[y]],
 #                          bagging_fraction = 1, #c(0.8, 1), # seq(0.4, 1, by = 0.2),
 #                          bagging_freq = 1,
 #                          nthread = 4,
-#                          mc = "1,0,0,1,0,0,1,1") # in the order of x
+#                          mc = "1,0,0,1,0,0,1,1") # monotonicity constraints in the order of x
 # (n <- nrow(paramGrid)) # 2160
 # set.seed(34234)
 # paramGrid <- paramGrid[sample(n, 40), ]
@@ -95,7 +95,7 @@ dtrain_lgb <- lgb.Dataset(prep_lgb(train, x), label = train[[y]],
 load("rdata/paramGrid_lgb.RData", verbose = TRUE)
 head(paramGrid <- paramGrid[order(-paramGrid$score), ])
 
-# Use best only (no ensembling)
+# Use best only
 cat("Best rmse (CV):", -paramGrid[1, "score"])
 
 system.time(fit_lgb <- lgb.train(paramGrid[1, -(1:2)], 
@@ -110,7 +110,7 @@ system.time(fit_lgb <- lgb.train(paramGrid[1, -(1:2)],
 # lgb.plot.importance(imp_lgb, top_n = length(x), cex = 0.8)
 
 #======================================================================
-# Model interpretation
+# Model interpretation via DALEX explainers
 #======================================================================
 
 ## Initializing the "explainers"
@@ -128,14 +128,14 @@ explainer_lgb <- explain(fit_lgb, data = valid[, x], y = valid[[y]], label = "Tr
 explainers <- list(explainer_lm, explainer_rf, explainer_lgb)
 
 # Model performance
-perfTable <- lapply(explainers, get_performance, 
-                    metrics = c(rmse = rmse, mae = mae, `r-squared` = r2)) %>% 
+perfTable <- lapply(explainers, performance, 
+                    metrics = c(`root-mean-squared error` = rmse, `mean absolute deviation` = mae, `R-squared` = r2)) %>% 
   bind_rows()
 
 # Variable importance
 set.seed(3452)
 varImp <- lapply(explainers, variable_importance, n_sample = -1, 
-                 loss = rmse, type = "difference") %>% 
+                 loss = mse, type = "difference") %>% 
   bind_rows %>% 
   filter(substring(variable, 1, 1) != "_")
 
@@ -146,9 +146,9 @@ most_relevant <- varImp %>%
   pull(variable) %>% 
   as.character()
 
-# Partial dependence
+# Partial dependence enriched by descriptive info
 eff <- lapply(most_relevant, effects, data = prep, explainers = explainers, response = "price") %>% 
   setNames(most_relevant)
 
-# Save every important result
+# Save results (no models)
 save(perfTable, varImp, most_relevant, eff, file = "rdata/models.RData")

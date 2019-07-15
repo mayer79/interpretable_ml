@@ -8,68 +8,63 @@ output:
 ---
 
 ```{r setup, warning = FALSE, message = FALSE, echo = FALSE}
-source("../r/functions.R", encoding = "UTF-8")
-
-knitr::opts_chunk$set(fig.width = 16, fig.height = 10, echo = FALSE, 
-                      warning = FALSE, message = FALSE) 
-
-# Path to data
-path <- "../rdata"
-
-# Load prep data plus further constants
-load(file.path(path, "prep.RData"))
-load(file.path(path, "models.RData"))
-
 library(tidyverse)
 library(ggpubr)
 library(kableExtra)
 library(moderndive)
+
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE) 
+
+theme_set(theme_bw(base_size = 12))
+
+source("../r/functions.R", encoding = "UTF-8")
+
+load("../rdata/prep.RData")
+load("../rdata/models.RData")
+
+
 ```
 
-## Basic Idea
-
-## Aims of this project
+# Aims and Background of this Project
 
 This project has three aims:
 
-1) Provide a template for small to medium sized machine learning projects.
+1) Provide a starting point for small to medium sized machine learning projects.
 
-2) Explain and visualize the results of the models.
+2) Explain and visualize the results of the models in a model agnostic way.
 
-3) Automatically generate a slim report by a compact R markdown script.
+3) Automatically generate this report by a compact R markdown script.
 
-## Background
+In contrast to classic statistical modelling techniques like linear regression, modern machine learning approaches tend to provide black box results. In some areas like visual computing or natural language processing, this is not an issue since focus usually lies on predicting things. Either the predictions are sufficiently useful in practice or the model will be discarded. However, in areas where the purpose of a statistical model is also to explain or validate underlying theories (e.g. in medicine, economics, and biology), black box models are of little use. 
 
-In contrast to classic statistical modelling techniques like linear regression, modern machine learning approaches tend to provide black box results. In some areas like visual computing or natural language processing, this is not an issue since focus usually lies on predicting things. Either the model provides sufficiently useful predictions in practice or it will be discarded. However, in areas where the purpose of a statistical model is also to explain or validate underlying theories (e.g. in medicine, economics, and biologiy), black box models are of little use. 
+Thus, there is need to make machine learning models "less black" resp. to explain machine learning models as good as possible. Of special interest are **model agnostic** approaches that work for any kind of modelling technique, no matter if it is a linear regression, a neural net or a tree-based method. The only requirement is the availability of a prediction function.
 
-Thus, there is need to make machine learning models "less black" resp. to explain machine learning models as good as possible. Of special interest are "model agnostic" approaches that work for any kind of modelling technique, no matter if it is a linear regression, a neural net or a tree-based method. 
+Such model agnostic approaches include the following:
 
-Some helpful model agnostic elements include the following:
+- **Model performance**: How precise are models if applied to unseen data?
 
-- Model performance: How precise are models if applied e.g. to unseen data?
+- **Variable importance**: Which variables are particularly relevant? A model agnostic way to assess this is called *permutation importance*: For each input variable $X$, its values are randomly shuffled and the drop in performance (or the increase in loss) is calculated on unseen data. The more important a variable, the larger the drop. If a variable can be shuffled without any impact on model precision, it is completely irrelevant.
 
-- Variable importance: Which variables are particularly relevant? A model agnostic way to assess this is called "permutation importance": For each input variable $X$, its values are randomly shuffled and the drop in performance (or the increase in loss) is calculated. The more important a variable for forming the prediction, the larger the drop. If a variable can be shuffled without any impact on model precision, it is completely irrelevant.
+- **Ceteris paribus profiles**: How do predictions of line $i$ change when one or multiple inputs $X$ are systematically being changed? E.g. how does the predicted house price change when moving it across all ZIPs, holding all other inputs constant? For a multiple linear regression, all profiles are linear. 
 
-- Ceteris paribus profiles: How do predictions of line $i$ change when one or multiple inputs $X$ are systematically being changed? E.g. how does the predicted house price change when moving it across all ZIPs, holding all other inputs constant?
+- **Partial dependence plots**: Average of many ceteris paribus profiles, e.g. across the validation data.
 
-- Partial dependence plots: Average of ceteris paribus profiles e.g. of the full validation data.
+In R, the **`DALEX` package** provides a common interface to many such tools. It works by creating an *"*explainer*"* consisting of a model fit, an evaluation data set, a prediction function based on the latter two, the responses, a label and an inverse link function to post-process the predictions. This is specified for each model. Based on these informations, different model agnostic evaluations can be derived compared across models. One disadvantage of `DALEX` is its limited possibility to post-process the results. E.g. it is not easy to combine a partial dependence plot with boxplots of the response. Fortunately, it is very easy to write own functions that takes a `DALEX` explainer as input and calculates the quantities of interest. In this project, we e.g. use our own partial dependence function to stay fully flexible.
 
-In R, the `DALEX` package provides a common interface to many such tools. It works by creating an "explainer" consisting of a model fit, an evaluation data set, a prediction function based on the latter two, the responses, a label and an inverse link function to post-process the predictions. This is done for each model. Based on these informations, most model agnostic evaluations can be derived. One disadvantage of `DALEX` is that its results are not meant for postprocessing. E.g. it is not easy to combine a partial dependence plot with boxplots of the response. Fortunately, it is very easy to write own functions based on `DALEX` explainers. In this project, we e.g. write our own "partial dependence plot" functions as well as a function to extract model performance.
+# Situation under Consideration
 
-## Situation under Consideration
-
-As illustration of above ideas we use the data set `house_prices` with information on `r format_large(nrow(prep))` houses sold in King County between May 2014 and May 2015. It is shipped along with R package `moderndive`.
+As illustration of above ideas, we use the data set `house_prices` with information on `r format_large(nrow(prep))` houses sold in King County between May 2014 and May 2015. It is shipped along with R package `moderndive`.
 
 The first few observations look as follows:
 
 ```{r}
 house_prices %>% 
-  head(10) %>% 
+  head() %>% 
   kable() %>%
-  kable_styling()
+  kable_styling(font_size = 10)
 ```
 
-Thus we have access to many relevant infos like size and condition as well as location of the objects. We want to use these variables to predict the (log) house prices by the help of the following regression techniques and shed some light on them: 
+Thus we have access to many relevant infos like size, condition as well as location of the objects. We want to use these variables to predict the (log) house prices by the help of the following regression techniques and shed some light on them: 
 
 - linear regression,
 
@@ -77,41 +72,35 @@ Thus we have access to many relevant infos like size and condition as well as lo
 
 - boosted trees.
 
-We use 70% of the data as training data to calculate the models, 20% for evaluating their performance and explaining them. 10% we keep untouched. They could be used for evaluating the performance of the finally selected model (in our case probably the boosted trees or an aggregate of all modelling techniques).
+We use 70% of the data to calculate the models, 20% for evaluating their performance and for explaining them. 10% we keep untouched for further decisions.
 
-Note: All model related decisions were made on the training data, e.g. by five-fold cross-validation in case of the parameter tuning of the boosted trees.
+*Note:* All model related decisions were made on the training data, e.g. by five-fold cross-validation in case of the parameter tuning of the boosted trees.
 
-### Monotonicity
+**Monotonicity**: One big step towards explainability of a model is to set monotonicity constraints on the model effects, an option that is e.g. available in the two major tree boosting libraries "XGBoost" and "LightGBM" (we are working with the latter here). For our tree booster, we impose positive constraints on "grade", "sqft_living", "condition" as well as "waterfront". As a consequence, its ceteris paribus profiles and their aggregated partial dependence plots will be monotonically increasing in these variables. So e.g. a higher grade will never lead to a lower prediction if all other values are kept constant. This is an extremely important option in real-world application where users of the model can play around with the input.
 
-One big step towards explainability is to introduce monotonicity constraints in the model effects, an option that is e.g. available in the two major tree boosting libraries "XGBoost" and "LightGBM" (we are working with the latter here). We impose positive constraints on "grade", "sqft_living", "condition" as well as "waterfront". As a consequence, ceteris paribus profiles and their aggregated partial dependence plots will be monotonically increasing in these variables. So e.g. a higher grade will never lead to a lower prediction if all other values are kept constant. This is an extremely important option in real-world application where users of the model can play around with the input. 
+# Results
 
-## Results
+We now briefly summarize the results of the models.
 
-### Performance of the Models
+## Performance of the Models
 
-We have ended up with the following metrics evaluated on the validation data in the log world:
-
-- `rmse`: The root mean squared error
-
-- `mae`: The mean absolute error
-
-- `R-squared`: The usual R-squared. The only metric shown where higher values are better.
+The model performances on the 20% validation data (evaluated on log-currency scale) is as follows.
 
 ```{r}
 ggplot(perfTable, aes(x = label, y = value, fill = label)) + 
   geom_bar(position = position_dodge(), stat = "identity", show.legend = FALSE) +
-  facet_wrap(~type) +
+  facet_wrap(~type, scales = "free_y") +
   ggtitle("Model performance") + 
-  theme_bw(base_size = 25) +
   theme(legend.title = element_blank(), 
         legend.position = "bottom", 
         axis.text.x = element_text(angle = 45, hjust = 1)) +
   labs(x = element_blank(), y = element_blank()) +
   scale_fill_viridis_d(begin = 0.1, end = 0.7)
 ```
-The winner (as always in these kind of comparisons) is the tuned tree booster. Without any tuning, the random forest was better.
 
-### Variable Importance
+The winner is the tuned tree booster.
+
+## Variable Importance
 
 Which variables have the highest impact on the response? Which are irrelevant?
 
@@ -120,7 +109,6 @@ ggplot(varImp, aes(x = reorder(variable, dropout_loss), y = dropout_loss, fill =
   geom_bar(position = position_dodge(), stat = "identity", show.legend = FALSE) +
   facet_wrap(~label) +
   coord_flip() +
-  theme_bw(base_size = 25) +
   theme(axis.text.x = element_blank()) +
   labs(x = element_blank(), y = element_blank()) +
   scale_fill_viridis_d(begin = 0.1, end = 0.7)
@@ -128,21 +116,21 @@ ggplot(varImp, aes(x = reorder(variable, dropout_loss), y = dropout_loss, fill =
 
 The best predictors seem to be `r paste(most_relevant[1:2], collapse = ", ")`, and `r most_relevant[3]`. It is interesting to see how well the boosted trees pick up the effect of the zip code, even if we have represented it as a numeric variable without dummy coding or pre-sorting on the response.
 
-### Effects
+## Effects
 
 We now describe the association with the response for each input variable by considering both
 
-- **empirical effects**, i.e. boxplots (boxes only) of the response per level of the covariable,
+- empirical effects, i.e. boxplots (boxes only) of the response per level of the covariable,
 
-- corresponding **partial dependence plots** of modelled effects.
+- corresponding partial dependence plots of modelled effects, i.e. averaged ceteris paribus profiles across the validation data set.
 
 The results are ordered by variable importance.
 
-Note that numeric covariables with many categories were grouped for visualization.
+*Note:* Numeric input variables with many distinct values were binned for visualization.
 
 ```{r, results = "asis"}
 for (v in most_relevant) { # v <- most_relevant[[1]]
-  cat(sprintf("#### %s \n", v))
+  cat(sprintf("### %s \n", v))
   
   # Boxplots with empirical results plus partial dependence plots
   resp <- ggplot(mapping = aes(x = factor(temp_), y = price)) +
@@ -153,15 +141,14 @@ for (v in most_relevant) { # v <- most_relevant[[1]]
     xlab(element_blank()) +
     scale_y_continuous(name = "Price", labels = format_large) +
     scale_color_viridis_d(begin = 0.1, end = 0.7) +
-    theme_bw(base_size = 25) +
-    theme(legend.position = c(0.5, 0.9), legend.title = element_blank(),
+    theme(legend.position = c(0.5, 0.8), legend.title = element_blank(),
           legend.background = element_rect(fill = "transparent"),
           axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
   
   # Count distributions visualized as bar plots
   counts <- ggplot(count(eff[[v]]$data, temp_), aes(x = temp_, y = n, label = format_large(n))) +
     geom_bar(stat = "identity", fill = "darkblue", alpha = 0.1, width = 0.3) +
-    geom_text(aes(y = 0), angle = 90, hjust = -0.1, size = 6) +
+    geom_text(aes(y = 0), angle = 90, hjust = -0.1, size = 3) +
     theme_void() +
     theme(strip.text.x = element_blank(), panel.grid = element_blank())
 

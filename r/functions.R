@@ -1,3 +1,11 @@
+#==================================================================
+# Functions
+#==================================================================
+
+#==================================================================
+# 1) General functions
+#==================================================================
+
 # Partial dependency plot data for DALEX explainer.
 #'
 #' @import dplyr
@@ -42,8 +50,29 @@ partialDependence <- function(explainer, grid, by = NULL) {
     mutate(label = explainer$label)
 }
 
-# Model performance for one Dalex explainer. "metrics" is a named vector or list of functions taking
-# two arguments: the observed and predicted values and returning a numeric value.
+# Model performance evaluation for DALEX explainer.
+#'
+#' @importFrom dplyr mutate
+#' @importFrom tidyr gather
+#' 
+#' @description Returns model performance metrics of a DALEX explainer for a named list or vector of performance metric functions of the form f(y, pred) = value.
+#' @author Michael Mayer, \email{mayermichael79@gmail.com}
+#' @param explainer DALEX explainer.
+#' @param metrics A named list or vector of metric functions.
+#' 
+#' @return Data frame with performance values in "long" form.
+#' 
+#' @example
+#' \dontrun{ 
+#' library(DALEX)
+#' library(ModelMetrics)
+#' library(tidyverse)
+#' fit <- lm(log(Sepal.Length) ~ ., data = iris)
+#' explainer <- explain(fit, data = iris, y = log(iris$Sepal.Length), 
+#'                      label = "log_ols", link = exp)
+#' dat <- performance(explainer, c(rmse = rmse, mae = mae))
+#' ggplot(dat, aes(x = type, y = value)) + geom_point()
+#' }
 performance <- function(explainer, metrics) {
   stopifnot(inherits(explainer, "explainer"))
 
@@ -56,10 +85,56 @@ performance <- function(explainer, metrics) {
     mutate(type = factor(type, names(metrics)))
 }
 
-# R-squared
+# R-squared evaluation "metric"
+#'
+#' @description Returns R-squared of predicted values.
+#' @author Michael Mayer, \email{mayermichael79@gmail.com}
+#' @param y Observed values.
+#' @param pred Predicted values.
+
+#' @return Numeric value of the R-squared.
+#' 
+#' @example
+#' r2(1:10, 2:11)
 r2 <- function(y, pred) {
   1 - sum((y - pred)^2) / sum((y - mean(y))^2)
 }
+
+# Values describing the box of a boxplot. Can be used together with \code{geom_stats} of \code{ggplot}.
+#'
+#' @importFrom stats quantile
+#' 
+#' @description Returns median and the two other quartiles.
+#' @author Michael Mayer, \email{mayermichael79@gmail.com}
+#' @param x Numeric vector to be described.
+
+#' @return A \code{data.frame} with one row containing the median and the two quarties.
+#' 
+#' @example
+#' box_stats(1:10)
+box_stats <- function(x) {
+  out <- data.frame(t(quantile(x, probs = c(0.5, 0.25, 0.75), na.rm = TRUE)))
+  names(out) <- c("y", "ymin", "ymax")
+  out
+}
+
+# # Formats large numbers like 1'000'000.
+#' 
+#' @description # # Formats large numbers as 1'000'000.
+#' @author Michael Mayer, \email{mayermichael79@gmail.com}
+#' @param x Numeric vector to be formatted.
+
+#' @return A character vector of the same length as \code{x}.
+#' 
+#' @example
+#' format_large(1000000)
+format_large <- function(x) {
+  format(x, big.mark = "'", scientific = FALSE)
+}
+
+#==================================================================
+# 2) Specific functions for this project
+#==================================================================
 
 # Interface to lm
 prep_lm <- function(data) {
@@ -108,17 +183,5 @@ effects <- function(data, v, explainers, response, breaks = NULL) {
   list(modelled = modelled, data = select_at(data, c(response, "temp_")))
 }
 
-# Function used with geom_stat to show boxplots without whiskers
-# and without needing to change the coordinate system
-box_stats <- function(x) {
-  quantile(x, probs = c(0.5, 0.25, 0.75), na.rm = TRUE) %>%
-    t() %>% 
-    data.frame() %>% 
-    setNames(c("y", "ymin", "ymax"))
-}
 
-# Formats large numbers in a nice way
-format_large <- function(x) {
-  format(x, big.mark = "'", scientific = FALSE)
-}
 

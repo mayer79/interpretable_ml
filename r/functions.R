@@ -42,9 +42,9 @@ partialDependence <- function(explainer, grid, by = NULL) {
     mutate(label = explainer$label)
 }
 
-# Model performance for Dalex explainer. Metrics is a named vector or list of functions taking
-# two arguments: the observed and predicted values
-get_performance <- function(explainer, metrics) {
+# Model performance for one Dalex explainer. "metrics" is a named vector or list of functions taking
+# two arguments: the observed and predicted values and returning a numeric value.
+performance <- function(explainer, metrics) {
   stopifnot(inherits(explainer, "explainer"))
 
   with(explainer,
@@ -65,7 +65,8 @@ r2 <- function(y, pred) {
 prep_lm <- function(data) {
   data %>% 
     mutate(sqrt_living = log(sqft_living),
-           sqrt_lot = log(sqft_lot))
+           sqrt_lot = log(sqft_lot),
+           zipcode = factor(zipcode %/% 10))
 }
 
 # Interface to lgb
@@ -102,18 +103,22 @@ effects <- function(data, v, explainers, response, breaks = NULL) {
     left_join(grid, by = v) %>% 
     select(-one_of(v)) %>% 
     rename_at("predicted", function(nm) response)
-  
+
   # Descriptive data joined with partial dependence data and scaling data
-  
-  list(modelled = modelled, 
-       data = data %>% select_at(c(response, "temp_")), 
-       counts = count(data, temp_))
+  list(modelled = modelled, data = select_at(data, c(response, "temp_")))
 }
 
+# Function used with geom_stat to show boxplots without whiskers
+# and without needing to change the coordinate system
 box_stats <- function(x) {
   quantile(x, probs = c(0.5, 0.25, 0.75), na.rm = TRUE) %>%
     t() %>% 
     data.frame() %>% 
     setNames(c("y", "ymin", "ymax"))
+}
+
+# Formats large numbers in a nice way
+format_large <- function(x) {
+  format(x, big.mark = "'", scientific = FALSE)
 }
 

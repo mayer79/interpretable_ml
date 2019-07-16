@@ -11,7 +11,7 @@
 #' @import dplyr
 #' @importFrom tidyr crossing
 #' 
-#' @description Generates partial dependence plot data based on a DALEX explainer. Note that there is an unkeyed outer join of the explainer data and all combinations of the grid variables. Thus, don't use too many grid points or too large explainer data. Without aggregation, the function would return ceteris paribus profiles. Currently, CP profiles can be returned by passing an id column thorugh "by".
+#' @description Generates partial dependence plot data based on a DALEX explainer. Note that there is an unkeyed outer join of the explainer data and all combinations of the grid variables. Thus, don't use too many grid points or too large explainer data. Without aggregation, the function would return ceteris paribus profiles. Currently, CP profiles can be returned by passing an id column through "by" (see example).
 #' @author Michael Mayer, \email{mayermichael79@gmail.com}
 #' @param explainer DALEX explainer.
 #' @param grid A named list of grid points.
@@ -71,7 +71,8 @@ partialDependence <- function(explainer, grid, by = NULL) {
 #' explainer <- explain(fit, data = iris, y = log(iris$Sepal.Length), 
 #'                      label = "log_ols", link = exp)
 #' dat <- performance(explainer, c(rmse = rmse, mae = mae))
-#' ggplot(dat, aes(x = type, y = value)) + geom_point()
+#' ggplot(dat, aes(x = type, y = value, fill = type)) + 
+#'   geom_bar(stat = "identity")
 #' }
 performance <- function(explainer, metrics) {
   stopifnot(inherits(explainer, "explainer"))
@@ -85,19 +86,64 @@ performance <- function(explainer, metrics) {
     mutate(type = factor(type, names(metrics)))
 }
 
-# R-squared evaluation "metric"
+# R-squared
 #'
-#' @description Returns R-squared of predicted values.
+#' @importFrom stats weighted.mean
+#' 
+#' @description Returns (weighted) R-squared of predicted values.
 #' @author Michael Mayer, \email{mayermichael79@gmail.com}
 #' @param y Observed values.
 #' @param pred Predicted values.
+#' @param w Optional case weights.
 
-#' @return Numeric value of the R-squared.
+#' @return The R-squared.
 #' 
 #' @example
-#' r2(1:10, 2:11)
-r2 <- function(y, pred) {
-  1 - sum((y - pred)^2) / sum((y - mean(y))^2)
+#' r2(1:10, c(1, 1:9))
+#' r2(1:10, c(1, 1:9), w = rep(1, 10))
+#' r2(1:10, c(1, 1:9), w = 1:10)
+r2 <- function(y, pred, w) {
+  1 - weighted.mean((y - pred)^2, w) / weighted.mean((y - mean(y))^2, w)
+}
+
+# Root-mean-squared error
+#'
+#' @importFrom stats weighted.mean
+#'
+#' @description Returns (weighted) root-mean-squared error of predicted values.
+#' @author Michael Mayer, \email{mayermichael79@gmail.com}
+#' @param y Observed values.
+#' @param pred Predicted values.
+#' @param w Optional case weights.
+
+#' @return The root-mean-squared error.
+#' 
+#' @example
+#' rmse(1:10, (1:10)^2)
+#' rmse(1:10, (1:10)^2, w = rep(1, 10))
+#' rmse(1:10, (1:10)^2, w = 1:10)
+rmse <- function(y, pred, w) {
+  sqrt(weighted.mean((y - pred)^2, w))
+}
+
+# Mean absolute error
+#'
+#' @importFrom stats weighted.mean
+#'
+#' @description Returns (weighted) mean absolute error of predicted values.
+#' @author Michael Mayer, \email{mayermichael79@gmail.com}
+#' @param y Observed values.
+#' @param pred Predicted values.
+#' @param w Optional case weights.
+
+#' @return The mean absolute value.
+#' 
+#' @example
+#' mae(1:10, (1:10)^2)
+#' mae(1:10, (1:10)^2, w = rep(1, 10))
+#' mae(1:10, (1:10)^2, w = 1:10)
+mae <- function(y, pred, w) {
+  weighted.mean(abs(y - pred), w)
 }
 
 # Values describing the box of a boxplot. Can be used together with \code{geom_stats} of \code{ggplot}.

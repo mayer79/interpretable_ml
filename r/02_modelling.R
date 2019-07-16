@@ -8,7 +8,6 @@ library(tidyverse)
 library(lightgbm) 
 library(ranger)
 library(caret)
-library(ModelMetrics)
 library(DALEX)
 
 load("rdata/prep.RData", verbose = TRUE)

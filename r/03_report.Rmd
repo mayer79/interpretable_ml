@@ -138,8 +138,8 @@ for (v in most_relevant) { # v <- most_relevant[[1]]
   resp <- ggplot(mapping = aes(x = factor(temp_), y = price)) +
     stat_summary(data = eff[[v]]$data, fun.data = box_stats, geom = "crossbar",
                  width = 0.3, fill = "darkblue", colour = "black", alpha = 0.1) +
-    geom_line(data = eff[[v]]$modelled, aes(group = label, color = label), size = 1.5) +
-    geom_point(data = eff[[v]]$modelled, aes(group = label, color = label), size = 4) +
+    geom_line(data = eff[[v]]$modelled, aes(group = label, color = label)) +
+    geom_point(data = eff[[v]]$modelled, aes(group = label, color = label), size = 2) +
     xlab(element_blank()) +
     scale_y_continuous(name = "Price", labels = format_large) +
     scale_color_viridis_d(begin = 0.1, end = 0.7) +

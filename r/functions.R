@@ -11,7 +11,7 @@
 #' @import dplyr
 #' @importFrom tidyr crossing
 #' 
-#' @description Generates partial dependence plot data based on a DALEX explainer. Note that there is an unkeyed outer join of the explainer data and all combinations of the grid variables. Thus, don't use too many grid points or too large explainer data.
+#' @description Generates partial dependence plot data based on a DALEX explainer. Note that there is an unkeyed outer join of the explainer data and all combinations of the grid variables. Thus, don't use too many grid points or too large explainer data. Without aggregation, the function would return ceteris paribus profiles. Currently, CP profiles can be returned by passing an id column thorugh "by".
 #' @author Michael Mayer, \email{mayermichael79@gmail.com}
 #' @param explainer DALEX explainer.
 #' @param grid A named list of grid points.

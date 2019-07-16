@@ -31,25 +31,25 @@ This project has three aims:
 
 1) Provide a starting point for small to medium sized machine learning projects.
 
-2) Explain and visualize the results of the models in a model agnostic way.
+2) Explain and visualize the results of the models.
 
-3) Automatically generate this report by a compact R markdown script.
+3) Automatically generate this report by a markdown script.
 
 In contrast to classic statistical modelling techniques like linear regression, modern machine learning approaches tend to provide black box results. In some areas like visual computing or natural language processing, this is not an issue since focus usually lies on predicting things. Either the predictions are sufficiently useful in practice or the model will be discarded. However, in areas where the purpose of a statistical model is also to explain or validate underlying theories (e.g. in medicine, economics, and biology), black box models are of little use. 
 
 Thus, there is need to make machine learning models "less black" resp. to explain machine learning models as good as possible. Of special interest are **model agnostic** approaches that work for any kind of modelling technique, no matter if it is a linear regression, a neural net or a tree-based method. The only requirement is the availability of a prediction function.
 
-Such model agnostic approaches include the following:
+Such model agnostic approaches include the following aspects:
 
 - **Model performance**: How precise are models if applied to unseen data?
 
-- **Variable importance**: Which variables are particularly relevant? A model agnostic way to assess this is called *permutation importance*: For each input variable $X$, its values are randomly shuffled and the drop in performance (or the increase in loss) is calculated on unseen data. The more important a variable, the larger the drop. If a variable can be shuffled without any impact on model precision, it is completely irrelevant.
+- **Variable importance**: Which variables are particularly relevant? A model agnostic way to assess this is called *permutation importance*: For each input variable $X$, its values are randomly shuffled and the drop in performance (or the increase in loss) is calculated. The more important a variable, the larger the drop. If a variable can be shuffled without any impact on model precision, it is completely irrelevant.
 
-- **Ceteris paribus profiles**: How do predictions of line $i$ change when one or multiple inputs $X$ are systematically being changed? E.g. how does the predicted house price change when moving it across all ZIPs, holding all other inputs constant? For a multiple linear regression, all profiles are linear. 
+- **Ceteris paribus profiles**: How do predictions of line $i$ change when input $X$ is systematically being changed? E.g. how does the predicted house price change when moving the house across all ZIPs, holding all other inputs constant? For a multiple linear regression, such profiles are linear. 
 
-- **Partial dependence plots**: Average of many ceteris paribus profiles, e.g. across the validation data.
+- **Partial dependence plots**: Average of many ceteris paribus profiles, e.g. across the validation data. Can be viewed as an average effect of variable $X$, pooled over potential intreactions.
 
-In R, the **`DALEX` package** provides a common interface to many such tools. It works by creating an *"*explainer*"* consisting of a model fit, an evaluation data set, a prediction function based on the latter two, the responses, a label and an inverse link function to post-process the predictions. This is specified for each model. Based on these informations, different model agnostic evaluations can be derived compared across models. One disadvantage of `DALEX` is its limited possibility to post-process the results. E.g. it is not easy to combine a partial dependence plot with boxplots of the response. Fortunately, it is very easy to write own functions that takes a `DALEX` explainer as input and calculates the quantities of interest. In this project, we e.g. use our own partial dependence function to stay fully flexible.
+In R, the **`DALEX` package** provides an elegant interface to many model agnostic tools. It works by creating an **explainer** consisting of a model fit, an evaluation data set, a prediction function based on the latter two, the responses, a label and an inverse link function to post-process the predictions. This is specified for each model. Based on these informations, different model agnostic evaluations can be derived and compared across models. One disadvantage of `DALEX` is its limited possibility to post-process the results. E.g. it is not easy to combine a partial dependence plot with boxplots of the response. Fortunately, it is very easy to write own functions that takes a `DALEX` explainer as input and calculates the quantities of interest. In this project, we e.g. use our own partial dependence function to stay fully flexible regarding visualization.
 
 # Situation under Consideration
 
@@ -72,7 +72,7 @@ Thus we have access to many relevant infos like size, condition as well as locat
 
 - boosted trees.
 
-We use 70% of the data to calculate the models, 20% for evaluating their performance and for explaining them. 10% we keep untouched for further decisions.
+We use 70% of the data to calculate the models, 20% for evaluating their performance and for explaining them. 10% we keep untouched.
 
 *Note:* All model related decisions were made on the training data, e.g. by five-fold cross-validation in case of the parameter tuning of the boosted trees.
 
@@ -102,7 +102,7 @@ The winner is the tuned tree booster.
 
 ## Variable Importance
 
-Which variables have the highest impact on the response? Which are irrelevant?
+Which variables have the highest impact on the response? Which ones are irrelevant?
 
 ```{r}
 ggplot(varImp, aes(x = reorder(variable, dropout_loss), y = dropout_loss, fill = label)) + 
@@ -114,7 +114,7 @@ ggplot(varImp, aes(x = reorder(variable, dropout_loss), y = dropout_loss, fill =
   scale_fill_viridis_d(begin = 0.1, end = 0.7)
 ```
 
-The best predictors seem to be `r paste(most_relevant[1:2], collapse = ", ")`, and `r most_relevant[3]`. It is interesting to see how well the boosted trees pick up the effect of the zip code, even if we have represented it as a numeric variable without dummy coding or pre-sorting on the response.
+The best predictors seem to be `r paste(most_relevant[1:2], collapse = ", ")`, and `r most_relevant[3]`. It is interesting to see how well the boosted trees pick up the effect of the zip code, even if we have represented it simply as a numeric variable without dummy coding or pre-sorting on the response.
 
 ## Effects
 
@@ -127,6 +127,8 @@ We now describe the association with the response for each input variable by con
 The results are ordered by variable importance.
 
 *Note:* Numeric input variables with many distinct values were binned for visualization.
+
+**Important: The partial dependence plot do not show average predictions, but average ceteris paribus profiles, i.e. partial effects that cannot be explained by other factors.**
 
 ```{r, results = "asis"}
 for (v in most_relevant) { # v <- most_relevant[[1]]

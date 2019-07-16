@@ -22,7 +22,6 @@ source("../r/functions.R", encoding = "UTF-8")
 load("../rdata/prep.RData")
 load("../rdata/models.RData")
 
-
 ```
 
 # Aims and Background of this Project

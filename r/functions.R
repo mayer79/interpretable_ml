@@ -11,12 +11,13 @@
 #' @import dplyr
 #' @importFrom tidyr crossing
 #' 
-#' @description Generates partial dependence plot data based on a DALEX explainer. Note that there is an unkeyed outer join of the explainer data and all combinations of the grid variables. Thus, don't use too many grid points or too large explainer data. Without aggregation, the function would return ceteris paribus profiles. Currently, CP profiles can be returned by passing an id column through "by" (see example).
+#' @description Generates partial dependence plot data based on a DALEX explainer. Note that there is an unkeyed outer join of the explainer data and all combinations of the grid variables. Thus, don't use too many grid points or too large explainer data. Without aggregation, the function would return ceteris paribus profiles.
 #' @author Michael Mayer, \email{mayermichael79@gmail.com}
 #' @param explainer DALEX explainer.
 #' @param grid A named list of grid points.
 #' @param by A vector of column names used to additionally group the results. Like this, it would also be possible to generate ceteris paribus profiles.
-
+#' @param w An column name with case weights.
+#' 
 #' @return Data frame with partial dependence data.
 #' 
 #' @example
@@ -28,16 +29,14 @@
 #' dat <- partialDependence(explainer, grid = list(Species = levels(iris$Species)))
 #' ggplot(dat, aes(x = Species, y = predicted)) + geom_point()
 #' 
-#' dat <- partialDependence(explainer, grid = list(Species = levels(iris$Species), Petal.Length = 1:6))
-#' ggplot(dat, aes(x = Petal.Length, y = predicted, group = Species, color = Species)) + geom_point()
-#' 
-#' dat <- partialDependence(explainer, grid = list(Petal.Length = 1:6), by = "Species")
+#' dat <- partialDependence(explainer, grid = list(Species = levels(iris$Species), Petal.Length = 1:6), 
+#'                          w = "Sepal.Width")
 #' ggplot(dat, aes(x = Petal.Length, y = predicted, group = Species, color = Species)) + geom_point()
 #' }
-partialDependence <- function(explainer, grid, by = NULL) {
+partialDependence <- function(explainer, grid, by = NULL, w = NULL) {
   stopifnot(inherits(explainer, "explainer"), 
             is.list(grid), length(grid) >= 1, 
-            c(by, (v <- names(grid))) %in% colnames(explainer$data), 
+            c(by, w, (v <- names(grid))) %in% colnames(explainer$data), 
             !any(c("label", "predicted") %in% v))
   
   explainer$data %>% 
@@ -45,7 +44,8 @@ partialDependence <- function(explainer, grid, by = NULL) {
     crossing(expand.grid(grid)) %>% 
     mutate(predicted = with(explainer, link(predict_function(model, .)))) %>% 
     group_by_at(c(v, by)) %>% 
-    summarize(predicted = mean(predicted, na.rm = TRUE)) %>% 
+    {if (is.null(w)) summarize(., predicted = mean(predicted, na.rm = TRUE)) else .} %>% 
+    {if (!is.null(w)) summarize(., predicted = weighted.mean(predicted, w = !!sym(w), na.rm = TRUE)) else .} %>% 
     ungroup() %>% 
     mutate(label = explainer$label)
 }

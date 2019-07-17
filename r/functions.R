@@ -86,6 +86,25 @@ performance <- function(explainer, metrics) {
     mutate(type = factor(type, names(metrics)))
 }
 
+# performance <- function(explainer, metrics, by = NULL, w = NULL) {
+#   stopifnot(inherits(explainer, "explainer"))
+#   data <- with(explainer, 
+#     cbind(data[, c(by, w), drop = FALSE], y = y, 
+#           pred = with(explainer, predict_function(model, data))))
+#   apply(metrics, 
+#   data %>% 
+#     group_by_at(by) %>% 
+#     summarize(function(fun, a, b) fun(a, b), FUN.VALUE = 1, 
+#                       a = y, b = pred))
+#   with(explainer,
+#        vapply(metrics, function(fun, a, b) fun(a, b), FUN.VALUE = 1, 
+#               a = y, b = predict_function(model, data))) %>% 
+#     t() %>% 
+#     data.frame(label = explainer$label, ., check.names = FALSE) %>% 
+#     gather(key = "type", value = "value", -label) %>% 
+#     mutate(type = factor(type, names(metrics)))
+# }
+
 # R-squared
 #'
 #' @importFrom stats weighted.mean
